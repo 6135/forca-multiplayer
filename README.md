@@ -16,6 +16,48 @@ state exchanged over a public MQTT broker. No backend, no database.
 Read [architecture.md](architecture.md) before you write any code. It defines the
 topic map, the encryption envelope, the state shapes and the failure modes.
 
-## Status
+## Run it
 
-Design only. No implementation yet.
+```bash
+npm install
+npm run dev        # the application on http://localhost:5173
+npm run broker     # optional: a local MQTT broker on ws://127.0.0.1:1884
+```
+
+The lobby holds a broker field. It defaults to the public HiveMQ endpoint. Put
+the local broker URL there when you develop offline.
+
+```bash
+npm test           # unit tests: the reducers, the words, the order, the envelope
+npm run typecheck
+npm run build
+npm run e2e        # three browsers, two rounds, one local broker
+```
+
+`npm run e2e` needs a Chromium build. Set `CHROMIUM_PATH` when Playwright cannot
+find one.
+
+## Layout
+
+| Path | Holds |
+|------|-------|
+| `src/net/` | Room identifier, PBKDF2 and AES-GCM, the envelope guard, MQTT. |
+| `src/game/` | Pure reducers, word folding, the frozen order. No network import. |
+| `src/roles/host/` | Room state, the score, the frozen order, the lifecycle. |
+| `src/roles/master/` | The word, the guess entry, the round state. |
+| `src/screens/`, `src/ui/` | The lobby, the room and the board. |
+
+`roundReducer` takes the word as a parameter and never writes it into
+`RoundState`, so the publisher cannot leak it.
+
+## Where the code refines the architecture
+
+| Item | Decision |
+|------|----------|
+| `room` and `roster` | Section 4.4 splits them, section 6.1 shows one type. `room` carries the lifecycle only. `roster` carries the state of section 6.1. |
+| Client and player identifiers | `src` is a client identifier, `order` and `masterId` hold player identifiers. `RoomState` gained `hostPlayerId`, and a `round` message is checked against `roster.masterId` and `roundNumber`. |
+| Last Will envelope | The broker holds it from connect time, so its `seq` and `ts` are stale on arrival. A payload marked `lwt` skips both checks and does not move the stored sequence number. |
+| Sequence numbers | Tracked per topic **and** per publisher. Every player writes `join`, and each round master restarts its counter on `round` and `round/end`. |
+| Carried lives | `lastRound.livesRemaining` passes the pool to the next master when `livesResetEachRound` is false. |
+| Round end | A win closes the round at once. A loss waits for the master, so the manual life control can still correct a mistyped guess. |
+| Extra config | `config.onePassLimit` ends the game after one round per player. |
