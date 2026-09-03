@@ -17,7 +17,9 @@ const BROKER_URL = `ws://127.0.0.1:${BROKER_PORT}`
 const ROOM = 'sala de teste'
 const KEY = 'chave-secreta'
 const WORD = 'gato'
-const WORD2 = 'sol'
+// A composite word. A line break must never cut one of its words in two.
+const WORD2 = 'league of legends'
+const WORD2_LETTERS = ['L', 'E', 'A', 'G', 'U', 'O', 'F', 'N', 'D', 'S']
 
 const broker = await Aedes.createBroker()
 const http = createServer()
@@ -100,11 +102,14 @@ try {
   // The watcher must outlive the host, because the host closes at the end.
   const watcher = pages.find((entry) => entry.page !== second && entry.page !== host).page
   check('the master changed with the frozen order', secondEntry.name !== masterEntry.name)
-  await second.getByLabel('Categoria').fill('astros')
+  await second.getByLabel('Categoria').fill('jogos')
   await second.getByLabel('Palavra').fill(WORD2)
   await second.getByRole('button', { name: 'Começar a ronda' }).click()
+  // A narrow screen is where a word breaks in two.
+  await watcher.setViewportSize({ width: 380, height: 800 })
   await watcher.getByText('Categoria:').waitFor({ timeout: 15000 })
-  for (const letter of ['S', 'O', 'L']) {
+  check('a word never breaks across two lines', await wordsStayWhole(watcher))
+  for (const letter of WORD2_LETTERS) {
     await second.getByRole('button', { name: letter, exact: true }).click()
   }
   await watcher.getByText(`A palavra era ${WORD2}`).waitFor({ timeout: 15000 })
@@ -169,6 +174,20 @@ async function findMaster(pages) {
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
   throw new Error('no device took the round master role')
+}
+
+/** Every slot of one word must sit on the same row. */
+async function wordsStayWhole(page) {
+  return page.evaluate(() => {
+    const words = [...document.querySelectorAll('.slots .word')]
+    if (words.length < 2) return false
+    return words.every((word) => {
+      const rows = new Set(
+        [...word.querySelectorAll('.slot')].map((slot) => slot.getBoundingClientRect().top),
+      )
+      return rows.size === 1
+    })
+  })
 }
 
 async function totalScore(page) {
