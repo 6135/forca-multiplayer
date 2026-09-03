@@ -34,6 +34,15 @@ npm run build
 npm run e2e        # three browsers, two rounds, one local broker
 ```
 
+To read the traffic of a live room in clear text:
+
+```bash
+npm run sniff -- "<room name>" "<room key>" [broker url]
+```
+
+A generic MQTT client cannot show these payloads. They are AES-GCM binary, so
+a client that reads a payload as UTF-8 drops the message without a word.
+
 `npm run e2e` needs a Chromium build. Set `CHROMIUM_PATH` when Playwright cannot
 find one.
 
@@ -61,3 +70,6 @@ find one.
 | Carried lives | `lastRound.livesRemaining` passes the pool to the next master when `livesResetEachRound` is false. |
 | Round end | A win closes the round at once. A loss waits for the master, so the manual life control can still correct a mistyped guess. |
 | Extra config | `config.onePassLimit` ends the game after one round per player. |
+| Restart | The host puts the room back in the lobby in place. The people stay, the scores go to zero and the order is drawn again. |
+| Round history | `RoomState.history` holds the last 50 finished rounds, so the history screen needs no new topic. |
+| Open room list | `forca/v1/directory/<roomId>`, retained and in **clear text**, because a lobby holds no room key. It is opt in per room and it publishes the room name only. The key still gates the room and still derives the cipher key, so the traffic stays unreadable. The cost is real: the room name becomes public and tied to its topic. The host repeats the entry every 30 s and a lobby drops an entry after 90 s, because one Last Will is already spent on `room` and a crashed host cannot clear the list. |

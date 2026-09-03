@@ -4,7 +4,8 @@
  */
 
 import type { RoomLink } from '../../net/mqtt'
-import type { Topics } from '../../net/topics'
+import { directoryTopic, type Topics } from '../../net/topics'
+import { HEARTBEAT_MS } from '../../net/directory'
 import { roomReducer, createRoomState, type RoomEvent } from '../../game/roomReducer'
 import { shuffle } from '../../game/order'
 import type {
@@ -26,6 +27,9 @@ export type HostDeps = {
   hostPlayerId: string
   hostName: string
   roomName: string
+  roomId: string
+  /** Puts the room on the open list. The host chooses this in the lobby. */
+  listed: boolean
   onState: (state: RoomState) => void
 }
 
@@ -33,6 +37,7 @@ export class HostController {
   private state: RoomState
   private openRoundId: string | null = null
   private graceTimer: ReturnType<typeof setTimeout> | null = null
+  private heartbeat: ReturnType<typeof setInterval> | null = null
 
   constructor(private readonly deps: HostDeps) {
     this.state = createRoomState({
@@ -54,12 +59,34 @@ export class HostController {
       { retain: true },
     )
     await this.publishRoster()
+    if (!this.deps.listed) return
+    // A crashed host cannot clear the entry, and one Last Will is already
+    // taken by `room`. The repeat is what makes a dead room drop off.
+    this.heartbeat = setInterval(() => this.advertise(), HEARTBEAT_MS)
+  }
+
+  /** One retained message in clear text, so a lobby with no key can read it. */
+  private advertise(): void {
+    if (!this.deps.listed) return
+    this.deps.link.publishRaw(
+      directoryTopic(this.deps.roomId),
+      {
+        v: 1,
+        roomId: this.deps.roomId,
+        name: this.deps.roomName,
+        players: this.state.players.filter((player) => player.connected).length,
+        open: this.state.status === 'lobby',
+        ts: Date.now(),
+      },
+      { retain: true },
+    )
   }
 
   private async publishRoster(): Promise<void> {
     const { v: _v, seq: _seq, ts: _ts, src: _src, ...body } = this.state
     this.deps.onState(this.state)
     await this.deps.link.publish(this.deps.topics.roster, body, { retain: true })
+    this.advertise()
   }
 
   /** Reduces one event and republishes when the state changed. */
@@ -126,6 +153,14 @@ export class HostController {
     await this.dispatch({ type: 'start_round' })
   }
 
+  /** Puts the room back in the lobby. Nobody leaves and nobody reconnects. */
+  async restart(): Promise<void> {
+    this.cancelGrace()
+    this.openRoundId = null
+    this.deps.link.clearRetained(this.deps.topics.round)
+    await this.dispatch({ type: 'restart' })
+  }
+
   async endGame(): Promise<void> {
     this.cancelGrace()
     this.deps.link.clearRetained(this.deps.topics.round)
@@ -157,6 +192,8 @@ export class HostController {
   /** Closes the room by hand. The Last Will covers a lost host. */
   async close(): Promise<void> {
     this.cancelGrace()
+    this.stopHeartbeat()
+    this.deps.link.clearRetained(directoryTopic(this.deps.roomId))
     this.deps.link.clearRetained(this.deps.topics.round)
     await this.deps.link.publish(
       this.deps.topics.room,
@@ -170,7 +207,14 @@ export class HostController {
     )
   }
 
+  private stopHeartbeat(): void {
+    if (this.heartbeat === null) return
+    clearInterval(this.heartbeat)
+    this.heartbeat = null
+  }
+
   dispose(): void {
     this.cancelGrace()
+    this.stopHeartbeat()
   }
 }

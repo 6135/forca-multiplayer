@@ -1,7 +1,17 @@
 /** Room rules. Pure. The host is the only writer of this state. */
 
 import { masterForRound } from './order'
-import type { LastRound, Player, RoomConfig, RoomState, RoundOutcome } from './types'
+import type {
+  LastRound,
+  Player,
+  RoomConfig,
+  RoomState,
+  RoundOutcome,
+  RoundRecord,
+} from './types'
+
+/** The roster travels on every change, so the history cannot grow forever. */
+export const HISTORY_LIMIT = 50
 
 export type RoomEvent =
   | { type: 'join'; playerId: string; name: string }
@@ -20,6 +30,7 @@ export type RoomEvent =
     }
   | { type: 'void_round' }
   | { type: 'end_game' }
+  | { type: 'restart' }
 
 export const DEFAULT_CONFIG: RoomConfig = {
   maxLives: 6,
@@ -47,7 +58,17 @@ export function createRoomState(args: {
     roundNumber: 0,
     masterId: null,
     lastRound: null,
+    history: [],
   }
+}
+
+function nameOf(players: readonly Player[], id: string | null): string | null {
+  if (id === null) return null
+  return players.find((player) => player.id === id)?.name ?? null
+}
+
+function remember(state: RoomState, record: RoundRecord): RoundRecord[] {
+  return [...state.history, record].slice(-HISTORY_LIMIT)
 }
 
 function withPlayers(state: RoomState, players: Player[]): RoomState {
@@ -150,9 +171,19 @@ export function roomReducer(state: RoomState, event: RoomEvent): RoomState {
       }
       const poolEmpty = !state.config.livesResetEachRound && event.livesRemaining <= 0
       const passDone = state.config.onePassLimit && state.roundNumber >= state.order.length
+      const record: RoundRecord = {
+        n: state.roundNumber,
+        word: event.word,
+        masterId: state.masterId ?? '',
+        masterName: nameOf(state.players, state.masterId) ?? '—',
+        winnerId: lastRound.winnerId,
+        winnerName: nameOf(state.players, lastRound.winnerId),
+        voided: false,
+      }
       return {
         ...state,
         players: scores,
+        history: remember(state, record),
         status: poolEmpty || passDone ? 'game_over' : 'round_end',
         masterId: poolEmpty || passDone ? null : state.masterId,
         lastRound,
@@ -165,11 +196,37 @@ export function roomReducer(state: RoomState, event: RoomEvent): RoomState {
         ...state,
         status: 'round_end',
         lastRound: { word: '', winnerId: null, voided: true },
+        history: remember(state, {
+          n: state.roundNumber,
+          word: '',
+          masterId: state.masterId ?? '',
+          masterName: nameOf(state.players, state.masterId) ?? '—',
+          winnerId: null,
+          winnerName: null,
+          voided: true,
+        }),
       }
     }
 
     case 'end_game':
       return { ...state, status: 'game_over', masterId: null }
+
+    case 'restart': {
+      // Back to the lobby with the same people. The scores go to zero and the
+      // order is dropped, so the next start draws a new one. Because the room
+      // is in the lobby again, a new player can enter.
+      if (state.status === 'lobby') return state
+      return {
+        ...state,
+        status: 'lobby',
+        players: state.players.map((player) => ({ ...player, score: 0 })),
+        order: [],
+        roundNumber: 0,
+        masterId: null,
+        lastRound: null,
+        history: [],
+      }
+    }
 
     default:
       return state

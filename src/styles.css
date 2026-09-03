@@ -67,6 +67,13 @@ button.link { background: none; border: none; color: var(--accent); padding: 0; 
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .presets { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .chip { font-size: 0.8rem; padding: 5px 9px; }
+.icon { padding: 9px 11px; line-height: 1; }
+
+.rooms__list { list-style: none; margin: 0 0 4px; padding: 0; max-height: 40vh; overflow-y: auto; }
+.rooms__list li { margin-bottom: 6px; }
+.room { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; }
+.room--picked { border-color: var(--accent); }
+.room__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .error { color: var(--bad); font-size: 0.9rem; }
 .notice { color: var(--accent); font-size: 0.9rem; }
@@ -126,6 +133,15 @@ button.link { background: none; border: none; color: var(--accent); padding: 0; 
   .slot { min-width: 22px; }
   .word { gap: 8px 5px; }
 }
+
+.history__head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.history__list { list-style: none; margin: 12px 0 0; padding: 0; max-height: 52vh; overflow-y: auto; }
+.history__row { display: flex; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.history__row:last-child { border-bottom: none; }
+.history__n { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 20px; }
+.history__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.history__word { font-size: 1.05rem; }
+.history__main .hint { margin: 0; }
 
 .ranking { margin: 0; padding-left: 20px; }
 .ranking li { display: flex; justify-content: space-between; padding: 4px 0; }

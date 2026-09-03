@@ -55,8 +55,9 @@ try {
 
   await enter(host, 'ana', 'Criar sala')
   await enter(guest, 'bruno', 'Entrar')
-  // A second join on the same topic. Each publisher counts on its own.
-  await enter(third, 'carla', 'Entrar')
+  // The third player picks the room from the open list, so the join uses the
+  // published room identifier and never derives one from the name.
+  await enterFromList(third, 'carla')
 
   await host.getByText('bruno').first().waitFor({ timeout: 15000 })
   await host.getByText('carla').first().waitFor({ timeout: 15000 })
@@ -83,8 +84,18 @@ try {
   await master.getByRole('button', { name: 'Z', exact: true }).click()
   await other.getByText('Letras erradas: Z').waitFor({ timeout: 10000 })
   check('a miss costs one life', (await other.getByText('Vidas:').innerText()).includes('5'))
+  check('a miss makes a sound', (await tones(other)) > 0)
 
-  for (const letter of ['G', 'A', 'T', 'O']) {
+  // A muted device must stay silent.
+  await other.getByRole('button', { name: 'Desligar o som' }).click()
+  const quietFrom = await tones(other)
+  await master.getByRole('button', { name: 'G', exact: true }).click()
+  await other.getByText('Vidas:').waitFor({ timeout: 10000 })
+  await other.waitForTimeout(600)
+  check('a muted device stays silent', (await tones(other)) === quietFrom)
+  await other.getByRole('button', { name: 'Ligar o som' }).click()
+
+  for (const letter of ['A', 'T', 'O']) {
     await master.getByRole('button', { name: letter, exact: true }).click()
   }
 
@@ -115,6 +126,47 @@ try {
   await watcher.getByText(`A palavra era ${WORD2}`).waitFor({ timeout: 15000 })
   check('the second round also scored', (await totalScore(host)) === 2)
 
+  // The history screen: the words, the writer and the winner.
+  await watcher.getByRole('button', { name: /Histórico/ }).click()
+  await watcher.getByRole('heading', { name: 'Palavras anteriores' }).waitFor({ timeout: 10000 })
+  check('the history lists both rounds', (await watcher.locator('.history__row').count()) === 2)
+  const historyText = await watcher.locator('.history__list').innerText()
+  check('the history holds both words', historyText.includes(WORD) && historyText.includes(WORD2))
+  check(
+    'the history says who wrote and who won',
+    historyText.includes('escrita por') && historyText.includes('ganha por'),
+  )
+  await watcher.getByRole('button', { name: 'Fechar' }).click()
+
+  // A restart returns the room to the lobby with the same people in it.
+  await host.getByRole('button', { name: 'Reiniciar a sala' }).click()
+  await watcher.getByRole('heading', { name: 'À espera de jogadores' }).waitFor({ timeout: 10000 })
+  check('a restart keeps every player', (await host.locator('.player').count()) === 3)
+  check('a restart clears the scores', (await totalScore(host)) === 0)
+  check(
+    'a restart clears the history',
+    (await host.getByRole('button', { name: /Histórico/ }).innerText()).trim() === 'Histórico',
+  )
+  await host.getByRole('button', { name: 'Começar o jogo' }).click()
+  await watcher.getByText('Ronda 1').waitFor({ timeout: 10000 })
+  check('the room plays again with no reconnection', true)
+
+  // A restart during a live round asks for a second click, and drops the word.
+  const reborn = await findMaster(pages)
+  await reborn.page.getByLabel('Categoria').fill('teste')
+  await reborn.page.getByLabel('Palavra').fill('ola')
+  await reborn.page.getByRole('button', { name: 'Começar a ronda' }).click()
+  await watcher.getByText('Categoria:').waitFor({ timeout: 15000 })
+  await host.getByRole('button', { name: 'Reiniciar a sala' }).click()
+  check(
+    'a live restart asks for a second click',
+    await host.getByRole('button', { name: 'Confirmar o reinício' }).isVisible(),
+  )
+  check('the round is still live before the second click', (await watcher.locator('.board').count()) === 1)
+  await host.getByRole('button', { name: 'Confirmar o reinício' }).click()
+  await watcher.getByRole('heading', { name: 'À espera de jogadores' }).waitFor({ timeout: 10000 })
+  check('a live restart clears the board', (await watcher.locator('.board').count()) === 0)
+
   // Constraint C5: the Last Will closes the room when the host connection dies.
   await host.context().close()
   await watcher.getByText('O anfitrião saiu. A sala fechou.').waitFor({ timeout: 20000 })
@@ -143,6 +195,22 @@ function check(label, condition) {
 
 async function newPage(browser, label) {
   const context = await browser.newContext()
+  // Counts the cues without needing an audio device.
+  await context.addInitScript(() => {
+    window.__tones = []
+    const proto = window.AudioContext && window.AudioContext.prototype
+    if (!proto) return
+    const create = proto.createOscillator
+    proto.createOscillator = function () {
+      const osc = create.call(this)
+      const start = osc.start.bind(osc)
+      osc.start = (...args) => {
+        window.__tones.push(1)
+        return start(...args)
+      }
+      return osc
+    }
+  })
   const page = await context.newPage()
   page.on('console', (message) => {
     if (message.type() === 'error') console.log(`[${label}] ${message.text()}`)
@@ -161,6 +229,17 @@ async function enter(page, name, button) {
   await page.getByRole('button', { name: 'Broker e credenciais' }).click()
   await page.getByLabel('Broker (WSS)').fill(BROKER_URL)
   await page.getByRole('button', { name: button }).click()
+  await page.getByRole('button', { name: /Fechar a sala|Sair/ }).waitFor({ timeout: 20000 })
+}
+
+/** Enters through the open room list instead of typing the room name. */
+async function enterFromList(page, name) {
+  await page.getByRole('button', { name: 'Broker e credenciais' }).click()
+  await page.getByLabel('Broker (WSS)').fill(BROKER_URL)
+  await page.getByRole('button', { name: new RegExp(ROOM) }).click({ timeout: 25000 })
+  await page.getByLabel('Chave da sala').fill(KEY)
+  await page.getByLabel('O seu nome').fill(name)
+  await page.getByRole('button', { name: 'Entrar' }).click()
   await page.getByRole('button', { name: /Fechar a sala|Sair/ }).waitFor({ timeout: 20000 })
 }
 
@@ -188,6 +267,10 @@ async function wordsStayWhole(page) {
       return rows.size === 1
     })
   })
+}
+
+function tones(page) {
+  return page.evaluate(() => window.__tones.length)
 }
 
 async function totalScore(page) {

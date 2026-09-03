@@ -176,6 +176,15 @@ export class RoomLink {
     client.publish(topic, Buffer.from(payload), { qos: 1, retain: options.retain })
   }
 
+  /**
+   * Publishes clear text, with no envelope and no encryption.
+   * Only the open room list uses this: a lobby has no room key, so it could
+   * not read a sealed payload. The message carries no secret.
+   */
+  publishRaw(topic: string, body: object, options: { retain: boolean }): void {
+    this.client?.publish(topic, JSON.stringify(body), { qos: 1, retain: options.retain })
+  }
+
   /** Clears a retained topic. A stale round must not reach the next joiner. */
   clearRetained(topic: string): void {
     this.guard.reset(topic)

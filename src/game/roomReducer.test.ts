@@ -152,6 +152,94 @@ describe('the end of the game', () => {
     expect(state.players.every((player) => player.score === 0)).toBe(true)
   })
 
+  it('restarts the room without dropping a player', () => {
+    let state = roomReducer(withPlayers(), { type: 'start_game', order: ['h', 'a', 'b'] })
+    state = roomReducer(state, {
+      type: 'round_end',
+      winnerId: 'a',
+      word: 'gato',
+      outcome: 'won',
+      livesRemaining: 3,
+    })
+    state = roomReducer(state, { type: 'presence', playerId: 'b', online: false })
+    const restarted = roomReducer(state, { type: 'restart' })
+
+    expect(restarted.status).toBe('lobby')
+    expect(restarted.players.map((player) => player.id)).toEqual(['h', 'a', 'b'])
+    expect(restarted.players.every((player) => player.score === 0)).toBe(true)
+    expect(restarted.order).toEqual([])
+    expect(restarted.roundNumber).toBe(0)
+    expect(restarted.masterId).toBe(null)
+    expect(restarted.lastRound).toBe(null)
+    // The connection state belongs to presence, not to the restart.
+    expect(restarted.players.find((player) => player.id === 'b')?.connected).toBe(false)
+  })
+
+  it('lets a new player in after a restart, and draws a new order', () => {
+    let state = roomReducer(withPlayers(), { type: 'start_game', order: ['h', 'a', 'b'] })
+    state = roomReducer(state, { type: 'restart' })
+    state = roomReducer(state, { type: 'join', playerId: 'c', name: 'carla' })
+    expect(state.players).toHaveLength(4)
+    state = roomReducer(state, { type: 'start_game', order: ['c', 'h', 'b', 'a'] })
+    expect(state.order).toEqual(['c', 'h', 'b', 'a'])
+    expect(state.roundNumber).toBe(1)
+  })
+
+  it('leaves a room that is already in the lobby alone', () => {
+    const lobbyState = withPlayers()
+    expect(roomReducer(lobbyState, { type: 'restart' })).toBe(lobbyState)
+  })
+
+  it('keeps a history of the words, with the writer and the winner', () => {
+    let state = roomReducer(withPlayers(), { type: 'start_game', order: ['h', 'a', 'b'] })
+    state = roomReducer(state, {
+      type: 'round_end',
+      winnerId: 'a',
+      word: 'gato',
+      outcome: 'won',
+      livesRemaining: 3,
+    })
+    expect(state.history).toHaveLength(1)
+    expect(state.history[0]).toMatchObject({
+      n: 1,
+      word: 'gato',
+      masterId: 'h',
+      masterName: 'host',
+      winnerId: 'a',
+      winnerName: 'ana',
+      voided: false,
+    })
+
+    state = roomReducer(state, { type: 'start_round' })
+    state = roomReducer(state, { type: 'void_round' })
+    expect(state.history).toHaveLength(2)
+    expect(state.history[1]).toMatchObject({ n: 2, voided: true, winnerName: null })
+  })
+
+  it('names no winner in the history when nobody scored', () => {
+    let state = roomReducer(withPlayers(), { type: 'start_game', order: ['h', 'a', 'b'] })
+    state = roomReducer(state, {
+      type: 'round_end',
+      winnerId: null,
+      word: 'gato',
+      outcome: 'lost',
+      livesRemaining: 0,
+    })
+    expect(state.history[0]).toMatchObject({ winnerId: null, winnerName: null, word: 'gato' })
+  })
+
+  it('drops the history on a restart', () => {
+    let state = roomReducer(withPlayers(), { type: 'start_game', order: ['h', 'a', 'b'] })
+    state = roomReducer(state, {
+      type: 'round_end',
+      winnerId: 'a',
+      word: 'gato',
+      outcome: 'won',
+      livesRemaining: 3,
+    })
+    expect(roomReducer(state, { type: 'restart' }).history).toEqual([])
+  })
+
   it('carries the life pool to the next round', () => {
     let state = roomReducer(withPlayers(), { type: 'config', patch: { livesResetEachRound: false } })
     state = roomReducer(state, { type: 'start_game', order: ['h', 'a', 'b'] })

@@ -26,6 +26,10 @@ export type Credentials = {
   brokerUrl: string
   username?: string
   password?: string
+  /** Puts the room on the open list. The host chooses this. */
+  listRoom?: boolean
+  /** Taken from the open room list, so no name has to match. */
+  roomId?: string
 }
 
 export const DEFAULT_BROKER = 'wss://broker.hivemq.com:8884/mqtt'
@@ -81,6 +85,8 @@ async function route(topic: string, message: Record<string, unknown>): Promise<v
       return
     }
     state.setRoster(roster)
+    // A restart drops the open round on every device, the master included.
+    if (roster.status === 'lobby') master?.abandon()
     return
   }
 
@@ -130,7 +136,9 @@ async function connect(
   credentials: Credentials,
   role: 'host' | 'player',
 ): Promise<{ link: RoomLink; topics: Topics; identity: Identity }> {
-  const roomId = await deriveRoomId(credentials.roomName, credentials.roomKey)
+  // A room picked from the open list carries its identifier, so a name that
+  // reads differently still reaches the right topic.
+  const roomId = credentials.roomId ?? (await deriveRoomId(credentials.roomName, credentials.roomKey))
   const key = await deriveRoomCryptoKey(credentials.roomKey, roomId)
   const clientId = newClientId()
   const playerId = stablePlayerId()
@@ -240,6 +248,8 @@ export async function createRoom(credentials: Credentials): Promise<void> {
       hostPlayerId: session.identity.playerId,
       hostName: session.identity.name,
       roomName: session.identity.roomName,
+      roomId: session.identity.roomId,
+      listed: credentials.listRoom !== false,
       onState: (roomState) => store.getState().setRoster(roomState),
     })
     master = new MasterController({
@@ -329,6 +339,7 @@ export const hostApi = {
   startGame: () => host?.startGame(),
   nextRound: () => host?.nextRound(),
   endGame: () => host?.endGame(),
+  restart: () => host?.restart(),
   voidRound: () => host?.voidRound(),
 }
 

@@ -37,6 +37,18 @@ export async function deriveRoomId(roomName: string, roomKey: string): Promise<s
   return base32(new Uint8Array(digest)).slice(0, 16)
 }
 
+/**
+ * The open room list. One retained message per room, in clear text, because a
+ * lobby holds no room key. `directory` is lower case, and a room identifier is
+ * upper case base32, so the two can never collide.
+ */
+export const DIRECTORY = `${PROTOCOL}/directory`
+export const DIRECTORY_FILTER = `${DIRECTORY}/+`
+
+export function directoryTopic(roomId: string): string {
+  return `${DIRECTORY}/${roomId}`
+}
+
 export type Topics = {
   prefix: string
   room: string
