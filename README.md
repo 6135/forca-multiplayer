@@ -34,6 +34,15 @@ npm run build
 npm run e2e        # three browsers, two rounds, one local broker
 ```
 
+To read the traffic of a live room in clear text:
+
+```bash
+npm run sniff -- "<room name>" "<room key>" [broker url]
+```
+
+A generic MQTT client cannot show these payloads. They are AES-GCM binary, so
+a client that reads a payload as UTF-8 drops the message without a word.
+
 `npm run e2e` needs a Chromium build. Set `CHROMIUM_PATH` when Playwright cannot
 find one.
 
