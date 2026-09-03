@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Banner } from '../ui/Banner'
 import { Board } from '../ui/Board'
+import { History } from '../ui/History'
 import { PlayerList } from '../ui/PlayerList'
 import { HostPanel } from '../roles/host/HostPanel'
 import { MasterPanel } from '../roles/master/MasterPanel'
@@ -26,6 +27,7 @@ export function Room() {
   const link = useGameStore((state) => state.link)
   const notice = useGameStore((state) => state.notice)
   const [quiet, setQuiet] = useState(isMuted())
+  const [showHistory, setShowHistory] = useState(false)
 
   // Hooks run before the early return, so the cues survive a slow first state.
   useCues(identity?.playerId ?? '')
@@ -70,6 +72,9 @@ export function Room() {
           </p>
         </div>
         <div className="actions">
+          <button type="button" onClick={() => setShowHistory(!showHistory)}>
+            Histórico{roster.history.length > 0 ? ` (${roster.history.length})` : ''}
+          </button>
           <button
             type="button"
             className="icon"
@@ -90,7 +95,9 @@ export function Room() {
 
       <div className="room__grid">
         <div className="room__main">
-          {roster.status === 'lobby' && (
+          {showHistory && <History roster={roster} onClose={() => setShowHistory(false)} />}
+
+          {!showHistory && roster.status === 'lobby' && (
             <section className="card">
               <h2>À espera de jogadores</h2>
               <p className="hint">
@@ -105,17 +112,17 @@ export function Room() {
             </section>
           )}
 
-          {roster.status === 'choosing' && !isMaster && (
+          {!showHistory && roster.status === 'choosing' && !isMaster && (
             <section className="card">
               <h2>{masterName} está a escolher a palavra</h2>
             </section>
           )}
 
-          {(roster.status === 'playing' || (roster.status === 'choosing' && round)) && round && (
-            <Board round={round} />
-          )}
+          {!showHistory &&
+            (roster.status === 'playing' || (roster.status === 'choosing' && round)) &&
+            round && <Board round={round} />}
 
-          {roster.status === 'round_end' && (
+          {!showHistory && roster.status === 'round_end' && (
             <section className="card">
               <h2>Fim da ronda</h2>
               {roster.lastRound?.voided ? (
@@ -131,7 +138,7 @@ export function Room() {
             </section>
           )}
 
-          {roster.status === 'game_over' && (
+          {!showHistory && roster.status === 'game_over' && (
             <section className="card">
               <h2>Fim do jogo</h2>
               <ol className="ranking">

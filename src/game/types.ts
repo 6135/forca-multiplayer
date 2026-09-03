@@ -36,6 +36,17 @@ export type RoomMeta = {
   roomName: string
 }
 
+/** One finished round, kept for the history screen. */
+export type RoundRecord = {
+  n: number
+  word: string
+  masterId: string
+  masterName: string
+  winnerId: string | null
+  winnerName: string | null
+  voided: boolean
+}
+
 /** Retained on `roster`. Published by the host. */
 export type RoomState = {
   v: number
@@ -51,6 +62,8 @@ export type RoomState = {
   roundNumber: number
   masterId: string | null
   lastRound: LastRound | null
+  /** Newest last. Capped, because the roster travels on every change. */
+  history: RoundRecord[]
 }
 
 export type Slot =
@@ -113,6 +126,20 @@ export type Presence = {
   playerId: string
   name: string
   online: boolean
+}
+
+/**
+ * Published in clear text on `forca/v1/directory/<roomId>`, retained.
+ * The lobby holds no room key, so this one topic cannot be encrypted.
+ * It carries no secret: the key still gates the room.
+ */
+export type RoomAd = {
+  v: number
+  roomId: string
+  name: string
+  players: number
+  open: boolean
+  ts: number
 }
 
 export type Guess = {

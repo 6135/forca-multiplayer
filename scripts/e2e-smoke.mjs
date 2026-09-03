@@ -55,8 +55,9 @@ try {
 
   await enter(host, 'ana', 'Criar sala')
   await enter(guest, 'bruno', 'Entrar')
-  // A second join on the same topic. Each publisher counts on its own.
-  await enter(third, 'carla', 'Entrar')
+  // The third player picks the room from the open list, so the join uses the
+  // published room identifier and never derives one from the name.
+  await enterFromList(third, 'carla')
 
   await host.getByText('bruno').first().waitFor({ timeout: 15000 })
   await host.getByText('carla').first().waitFor({ timeout: 15000 })
@@ -125,11 +126,27 @@ try {
   await watcher.getByText(`A palavra era ${WORD2}`).waitFor({ timeout: 15000 })
   check('the second round also scored', (await totalScore(host)) === 2)
 
+  // The history screen: the words, the writer and the winner.
+  await watcher.getByRole('button', { name: /Histórico/ }).click()
+  await watcher.getByRole('heading', { name: 'Palavras anteriores' }).waitFor({ timeout: 10000 })
+  check('the history lists both rounds', (await watcher.locator('.history__row').count()) === 2)
+  const historyText = await watcher.locator('.history__list').innerText()
+  check('the history holds both words', historyText.includes(WORD) && historyText.includes(WORD2))
+  check(
+    'the history says who wrote and who won',
+    historyText.includes('escrita por') && historyText.includes('ganha por'),
+  )
+  await watcher.getByRole('button', { name: 'Fechar' }).click()
+
   // A restart returns the room to the lobby with the same people in it.
   await host.getByRole('button', { name: 'Reiniciar a sala' }).click()
   await watcher.getByRole('heading', { name: 'À espera de jogadores' }).waitFor({ timeout: 10000 })
   check('a restart keeps every player', (await host.locator('.player').count()) === 3)
   check('a restart clears the scores', (await totalScore(host)) === 0)
+  check(
+    'a restart clears the history',
+    (await host.getByRole('button', { name: /Histórico/ }).innerText()).trim() === 'Histórico',
+  )
   await host.getByRole('button', { name: 'Começar o jogo' }).click()
   await watcher.getByText('Ronda 1').waitFor({ timeout: 10000 })
   check('the room plays again with no reconnection', true)
@@ -212,6 +229,17 @@ async function enter(page, name, button) {
   await page.getByRole('button', { name: 'Broker e credenciais' }).click()
   await page.getByLabel('Broker (WSS)').fill(BROKER_URL)
   await page.getByRole('button', { name: button }).click()
+  await page.getByRole('button', { name: /Fechar a sala|Sair/ }).waitFor({ timeout: 20000 })
+}
+
+/** Enters through the open room list instead of typing the room name. */
+async function enterFromList(page, name) {
+  await page.getByRole('button', { name: 'Broker e credenciais' }).click()
+  await page.getByLabel('Broker (WSS)').fill(BROKER_URL)
+  await page.getByRole('button', { name: new RegExp(ROOM) }).click({ timeout: 25000 })
+  await page.getByLabel('Chave da sala').fill(KEY)
+  await page.getByLabel('O seu nome').fill(name)
+  await page.getByRole('button', { name: 'Entrar' }).click()
   await page.getByRole('button', { name: /Fechar a sala|Sair/ }).waitFor({ timeout: 20000 })
 }
 
