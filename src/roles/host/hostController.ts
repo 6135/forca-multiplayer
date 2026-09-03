@@ -126,6 +126,14 @@ export class HostController {
     await this.dispatch({ type: 'start_round' })
   }
 
+  /** Puts the room back in the lobby. Nobody leaves and nobody reconnects. */
+  async restart(): Promise<void> {
+    this.cancelGrace()
+    this.openRoundId = null
+    this.deps.link.clearRetained(this.deps.topics.round)
+    await this.dispatch({ type: 'restart' })
+  }
+
   async endGame(): Promise<void> {
     this.cancelGrace()
     this.deps.link.clearRetained(this.deps.topics.round)

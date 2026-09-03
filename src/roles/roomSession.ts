@@ -81,6 +81,8 @@ async function route(topic: string, message: Record<string, unknown>): Promise<v
       return
     }
     state.setRoster(roster)
+    // A restart drops the open round on every device, the master included.
+    if (roster.status === 'lobby') master?.abandon()
     return
   }
 
@@ -329,6 +331,7 @@ export const hostApi = {
   startGame: () => host?.startGame(),
   nextRound: () => host?.nextRound(),
   endGame: () => host?.endGame(),
+  restart: () => host?.restart(),
   voidRound: () => host?.voidRound(),
 }
 

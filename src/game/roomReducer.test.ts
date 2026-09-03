@@ -152,6 +152,44 @@ describe('the end of the game', () => {
     expect(state.players.every((player) => player.score === 0)).toBe(true)
   })
 
+  it('restarts the room without dropping a player', () => {
+    let state = roomReducer(withPlayers(), { type: 'start_game', order: ['h', 'a', 'b'] })
+    state = roomReducer(state, {
+      type: 'round_end',
+      winnerId: 'a',
+      word: 'gato',
+      outcome: 'won',
+      livesRemaining: 3,
+    })
+    state = roomReducer(state, { type: 'presence', playerId: 'b', online: false })
+    const restarted = roomReducer(state, { type: 'restart' })
+
+    expect(restarted.status).toBe('lobby')
+    expect(restarted.players.map((player) => player.id)).toEqual(['h', 'a', 'b'])
+    expect(restarted.players.every((player) => player.score === 0)).toBe(true)
+    expect(restarted.order).toEqual([])
+    expect(restarted.roundNumber).toBe(0)
+    expect(restarted.masterId).toBe(null)
+    expect(restarted.lastRound).toBe(null)
+    // The connection state belongs to presence, not to the restart.
+    expect(restarted.players.find((player) => player.id === 'b')?.connected).toBe(false)
+  })
+
+  it('lets a new player in after a restart, and draws a new order', () => {
+    let state = roomReducer(withPlayers(), { type: 'start_game', order: ['h', 'a', 'b'] })
+    state = roomReducer(state, { type: 'restart' })
+    state = roomReducer(state, { type: 'join', playerId: 'c', name: 'carla' })
+    expect(state.players).toHaveLength(4)
+    state = roomReducer(state, { type: 'start_game', order: ['c', 'h', 'b', 'a'] })
+    expect(state.order).toEqual(['c', 'h', 'b', 'a'])
+    expect(state.roundNumber).toBe(1)
+  })
+
+  it('leaves a room that is already in the lobby alone', () => {
+    const lobbyState = withPlayers()
+    expect(roomReducer(lobbyState, { type: 'restart' })).toBe(lobbyState)
+  })
+
   it('carries the life pool to the next round', () => {
     let state = roomReducer(withPlayers(), { type: 'config', patch: { livesResetEachRound: false } })
     state = roomReducer(state, { type: 'start_game', order: ['h', 'a', 'b'] })

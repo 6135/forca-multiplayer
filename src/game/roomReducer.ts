@@ -20,6 +20,7 @@ export type RoomEvent =
     }
   | { type: 'void_round' }
   | { type: 'end_game' }
+  | { type: 'restart' }
 
 export const DEFAULT_CONFIG: RoomConfig = {
   maxLives: 6,
@@ -170,6 +171,22 @@ export function roomReducer(state: RoomState, event: RoomEvent): RoomState {
 
     case 'end_game':
       return { ...state, status: 'game_over', masterId: null }
+
+    case 'restart': {
+      // Back to the lobby with the same people. The scores go to zero and the
+      // order is dropped, so the next start draws a new one. Because the room
+      // is in the lobby again, a new player can enter.
+      if (state.status === 'lobby') return state
+      return {
+        ...state,
+        status: 'lobby',
+        players: state.players.map((player) => ({ ...player, score: 0 })),
+        order: [],
+        roundNumber: 0,
+        masterId: null,
+        lastRound: null,
+      }
+    }
 
     default:
       return state

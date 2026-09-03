@@ -1,5 +1,6 @@
 /** Host controls: the configuration, the start, the next round and the export. */
 
+import { useEffect, useState } from 'react'
 import { ranking } from '../../game/roomReducer'
 import { hostApi } from '../roomSession'
 import type { RoomState } from '../../game/types'
@@ -26,6 +27,24 @@ function exportRanking(roster: RoomState): void {
 
 export function HostPanel({ roster, blocked }: { roster: RoomState; blocked: boolean }) {
   const connected = roster.players.filter((player) => player.connected).length
+  const [armed, setArmed] = useState(false)
+  const live = roster.status === 'choosing' || roster.status === 'playing'
+
+  // A restart in the middle of a game asks for a second click, and forgets it.
+  useEffect(() => {
+    if (!armed) return undefined
+    const timer = setTimeout(() => setArmed(false), 4000)
+    return () => clearTimeout(timer)
+  }, [armed])
+
+  function restart(): void {
+    if (live && !armed) {
+      setArmed(true)
+      return
+    }
+    setArmed(false)
+    void hostApi.restart()
+  }
 
   return (
     <section className="panel panel--host">
@@ -101,6 +120,23 @@ export function HostPanel({ roster, blocked }: { roster: RoomState; blocked: boo
         <button type="button" onClick={() => exportRanking(roster)}>
           Exportar a classificação
         </button>
+      )}
+
+      {roster.status !== 'lobby' && (
+        <>
+          <button
+            type="button"
+            className={armed ? 'primary' : ''}
+            disabled={blocked}
+            onClick={restart}
+          >
+            {armed ? 'Confirmar o reinício' : 'Reiniciar a sala'}
+          </button>
+          <p className="hint">
+            Volta ao átrio com os mesmos jogadores. Os pontos vão a zero e a ordem é sorteada
+            outra vez. Ninguém sai da sala.
+          </p>
+        </>
       )}
 
       <p className="hint">A sala fecha quando o anfitrião sai. A classificação perde-se.</p>

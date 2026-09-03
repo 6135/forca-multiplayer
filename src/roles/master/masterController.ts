@@ -140,6 +140,16 @@ export class MasterController {
     await this.deps.link.publish(this.deps.topics.round, body, { retain: true })
   }
 
+  /** Drops the round without a reveal, after the host restarted the room. */
+  abandon(): void {
+    if (this.word === null && this.state === null) return
+    secretStore.clear()
+    this.word = null
+    this.state = null
+    this.winnerId = null
+    this.deps.onState(null)
+  }
+
   dispose(): void {
     this.word = null
     this.state = null

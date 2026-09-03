@@ -125,6 +125,31 @@ try {
   await watcher.getByText(`A palavra era ${WORD2}`).waitFor({ timeout: 15000 })
   check('the second round also scored', (await totalScore(host)) === 2)
 
+  // A restart returns the room to the lobby with the same people in it.
+  await host.getByRole('button', { name: 'Reiniciar a sala' }).click()
+  await watcher.getByRole('heading', { name: 'À espera de jogadores' }).waitFor({ timeout: 10000 })
+  check('a restart keeps every player', (await host.locator('.player').count()) === 3)
+  check('a restart clears the scores', (await totalScore(host)) === 0)
+  await host.getByRole('button', { name: 'Começar o jogo' }).click()
+  await watcher.getByText('Ronda 1').waitFor({ timeout: 10000 })
+  check('the room plays again with no reconnection', true)
+
+  // A restart during a live round asks for a second click, and drops the word.
+  const reborn = await findMaster(pages)
+  await reborn.page.getByLabel('Categoria').fill('teste')
+  await reborn.page.getByLabel('Palavra').fill('ola')
+  await reborn.page.getByRole('button', { name: 'Começar a ronda' }).click()
+  await watcher.getByText('Categoria:').waitFor({ timeout: 15000 })
+  await host.getByRole('button', { name: 'Reiniciar a sala' }).click()
+  check(
+    'a live restart asks for a second click',
+    await host.getByRole('button', { name: 'Confirmar o reinício' }).isVisible(),
+  )
+  check('the round is still live before the second click', (await watcher.locator('.board').count()) === 1)
+  await host.getByRole('button', { name: 'Confirmar o reinício' }).click()
+  await watcher.getByRole('heading', { name: 'À espera de jogadores' }).waitFor({ timeout: 10000 })
+  check('a live restart clears the board', (await watcher.locator('.board').count()) === 0)
+
   // Constraint C5: the Last Will closes the room when the host connection dies.
   await host.context().close()
   await watcher.getByText('O anfitrião saiu. A sala fechou.').waitFor({ timeout: 20000 })
