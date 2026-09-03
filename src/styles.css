@@ -67,6 +67,7 @@ button.link { background: none; border: none; color: var(--accent); padding: 0; 
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .presets { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .chip { font-size: 0.8rem; padding: 5px 9px; }
+.icon { padding: 9px 11px; line-height: 1; }
 
 .error { color: var(--bad); font-size: 0.9rem; }
 .notice { color: var(--accent); font-size: 0.9rem; }

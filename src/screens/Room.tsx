@@ -1,5 +1,6 @@
 /** The room. One screen for every status and every role. */
 
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Banner } from '../ui/Banner'
 import { Board } from '../ui/Board'
@@ -9,6 +10,8 @@ import { MasterPanel } from '../roles/master/MasterPanel'
 import { leaveRoom } from '../roles/roomSession'
 import { useGameStore } from '../store/gameStore'
 import { ranking } from '../game/roomReducer'
+import { useCues } from '../ui/useCues'
+import { isMuted, play, setMuted } from '../ui/sound'
 
 function shareLink(roomName: string): string {
   const base = `${location.origin}${location.pathname}`
@@ -22,6 +25,18 @@ export function Room() {
   const round = useGameStore((state) => state.round)
   const link = useGameStore((state) => state.link)
   const notice = useGameStore((state) => state.notice)
+  const [quiet, setQuiet] = useState(isMuted())
+
+  // Hooks run before the early return, so the cues survive a slow first state.
+  useCues(identity?.playerId ?? '')
+
+  function toggleSound(): void {
+    const next = !quiet
+    setQuiet(next)
+    setMuted(next)
+    // The click is the gesture that lets the browser open the audio context.
+    if (!next) play('hit')
+  }
 
   if (!identity || !roster) {
     return (
@@ -54,9 +69,20 @@ export function Room() {
             Ronda {roster.roundNumber} · {roster.status}
           </p>
         </div>
-        <button type="button" onClick={() => void leave()}>
-          {isHost ? 'Fechar a sala' : 'Sair'}
-        </button>
+        <div className="actions">
+          <button
+            type="button"
+            className="icon"
+            aria-label={quiet ? 'Ligar o som' : 'Desligar o som'}
+            title={quiet ? 'Ligar o som' : 'Desligar o som'}
+            onClick={toggleSound}
+          >
+            {quiet ? '🔇' : '🔊'}
+          </button>
+          <button type="button" onClick={() => void leave()}>
+            {isHost ? 'Fechar a sala' : 'Sair'}
+          </button>
+        </div>
       </header>
 
       <Banner status={link} />

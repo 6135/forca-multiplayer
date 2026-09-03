@@ -83,8 +83,18 @@ try {
   await master.getByRole('button', { name: 'Z', exact: true }).click()
   await other.getByText('Letras erradas: Z').waitFor({ timeout: 10000 })
   check('a miss costs one life', (await other.getByText('Vidas:').innerText()).includes('5'))
+  check('a miss makes a sound', (await tones(other)) > 0)
 
-  for (const letter of ['G', 'A', 'T', 'O']) {
+  // A muted device must stay silent.
+  await other.getByRole('button', { name: 'Desligar o som' }).click()
+  const quietFrom = await tones(other)
+  await master.getByRole('button', { name: 'G', exact: true }).click()
+  await other.getByText('Vidas:').waitFor({ timeout: 10000 })
+  await other.waitForTimeout(600)
+  check('a muted device stays silent', (await tones(other)) === quietFrom)
+  await other.getByRole('button', { name: 'Ligar o som' }).click()
+
+  for (const letter of ['A', 'T', 'O']) {
     await master.getByRole('button', { name: letter, exact: true }).click()
   }
 
@@ -143,6 +153,22 @@ function check(label, condition) {
 
 async function newPage(browser, label) {
   const context = await browser.newContext()
+  // Counts the cues without needing an audio device.
+  await context.addInitScript(() => {
+    window.__tones = []
+    const proto = window.AudioContext && window.AudioContext.prototype
+    if (!proto) return
+    const create = proto.createOscillator
+    proto.createOscillator = function () {
+      const osc = create.call(this)
+      const start = osc.start.bind(osc)
+      osc.start = (...args) => {
+        window.__tones.push(1)
+        return start(...args)
+      }
+      return osc
+    }
+  })
   const page = await context.newPage()
   page.on('console', (message) => {
     if (message.type() === 'error') console.log(`[${label}] ${message.text()}`)
@@ -188,6 +214,10 @@ async function wordsStayWhole(page) {
       return rows.size === 1
     })
   })
+}
+
+function tones(page) {
+  return page.evaluate(() => window.__tones.length)
 }
 
 async function totalScore(page) {
